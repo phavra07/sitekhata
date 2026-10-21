@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <link rel="manifest" href="./manifest.json" />
+  <title>SiteKhata Hybrid App</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .touch-btn { min-height: 46px; }
+    @media print {
+      body * { visibility: hidden; }
+      #printableReport, #printableReport * { visibility: visible; }
+      #printableReport { position: absolute; left: 0; top: 0; width: 100%; display: block !important; padding: 0; margin: 0; }
+      .no-print { display: none !important; }
+      .proof-card { break-inside: avoid; page-break-inside: avoid; margin-bottom: 24px; }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-900 pb-28">
+
+  <!-- ================= OFFLINE / ONLINE STATUS BANNER ================= -->
+  <div id="networkStatusBar" class="bg-emerald-600 text-white text-[11px] font-bold py-1 px-4 text-center sticky top-0 z-40 flex items-center justify-between">
+    <div class="flex items-center gap-1.5 mx-auto">
+      <span id="networkIcon">🟢</span>
+      <span id="networkText">Online — Cloud Sync Ready</span>
+      <span id="syncBadge" class="hidden bg-black/30 px-2 py-0.5 rounded-full text-[10px] ml-1">0 pending</span>
+    </div>
+    <button onclick="triggerCloudSync()" id="syncBtn" class="bg-white/20 hover:bg-white/30 text-white px-2 py-0.5 rounded text-[10px] font-black">
+      Sync Now
+    </button>
+  </div>
+
+  <!-- ================= INSTANT LOGIN MODAL ================= -->
+  <div id="loginModal" class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl text-center space-y-4">
+      <div class="text-5xl">👷‍♂️</div>
+      <div>
+        <h2 class="text-2xl font-black text-slate-800">SiteKhata</h2>
+        <p class="text-slate-500 text-xs mt-1">Works 100% Offline • Auto-Syncs Online</p>
+      </div>
+      <div>
+        <label class="block text-left text-xs font-bold text-slate-600 mb-1">YOUR NAME</label>
+        <input type="text" id="loginNameInput" placeholder="e.g. Ramesh Kumar" 
+               class="w-full px-4 py-3 text-lg border-2 border-slate-300 rounded-xl focus:outline-blue-600 font-bold" />
+      </div>
+      <button onclick="handleLogin()" 
+              class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 text-base rounded-xl shadow-lg touch-btn">
+        Open Khata ➔
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= TOP APP BAR ================= -->
+  <header class="bg-slate-900 text-white p-4 shadow-md no-print">
+    <div class="max-w-xl mx-auto flex items-center justify-between">
+      <div>
+        <h1 class="text-lg font-black tracking-wide flex items-center gap-1.5">
+          <span>📋</span> SiteKhata
+        </h1>
+        <p class="text-xs text-slate-400">PM: <span id="headerUserName" class="text-white font-bold"></span></p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="openCategoryModal()" class="bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-200 border border-slate-700">
+          🏷️ Categories
+        </button>
+        <button onclick="openSettingsModal()" class="bg-slate-800 hover:bg-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-200 border border-slate-700">
+          ⚙️
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= MAIN CONTAINER ================= -->
+  <main class="max-w-xl mx-auto p-4 space-y-4 no-print">
+
+    <!-- MONTH SELECTOR & SUMMARY -->
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+      <div class="flex items-center justify-between">
+        <label class="text-xs font-black text-slate-500 uppercase tracking-wider">Expense Month</label>
+        <input type="month" id="selectedMonth" onchange="renderUI()" 
+               class="border-2 border-slate-300 rounded-lg px-2.5 py-1 text-sm font-bold text-slate-800 focus:outline-blue-600" />
+      </div>
+
+      <!-- Claimable Card -->
+      <div class="bg-emerald-600 text-white p-4 rounded-xl shadow-md">
+        <div class="flex justify-between items-start">
+          <span class="text-xs uppercase font-bold tracking-wider opacity-90">🏢 Total Claimable This Month</span>
+          <span id="claimCountBadge" class="bg-emerald-800 text-[11px] font-bold px-2 py-0.5 rounded-full">0 txns</span>
+        </div>
+        <div class="text-3xl font-black mt-1" id="totalClaimableDisplay">₹0</div>
+        <p class="text-[11px] opacity-80 mt-1">Calculated offline directly from device database</p>
+      </div>
+
+      <div class="flex justify-between text-xs font-bold text-slate-600 px-1 pt-1 border-t border-slate-100">
+        <span>Total Logged Volume:</span>
+        <span id="grandTotalDisplay" class="text-slate-900 font-black">₹0</span>
+      </div>
+    </div>
+
+    <!-- PRIMARY ACTION BUTTONS -->
+    <div class="grid grid-cols-3 gap-2">
+      <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-md active:scale-95 transition touch-btn">
+        <span class="text-xl">📸</span>
+        <span class="font-bold text-xs mt-1">Bulk UPI Scan</span>
+        <span class="text-[9px] opacity-80">(Gallery)</span>
+        <input type="file" id="bulkInput" multiple accept="image/*" class="hidden" onchange="handleBulkFiles(event)" />
+      </label>
+
+      <button onclick="openManualModal()" class="bg-slate-800 hover:bg-slate-700 text-white rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-md active:scale-95 transition touch-btn">
+        <span class="text-xl">➕</span>
+        <span class="font-bold text-xs mt-1">Manual Entry</span>
+        <span class="text-[9px] opacity-80">(Cash / Bank)</span>
+      </button>
+
+      <button onclick="openMonthlyProofReport()" class="bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-md active:scale-95 transition touch-btn">
+        <span class="text-xl">📄</span>
+        <span class="font-bold text-xs mt-1">Claim Sheet</span>
+        <span class="text-[9px] opacity-80">(With Proofs)</span>
+      </button>
+    </div>
+
+    <!-- Processing Alert -->
+    <div id="processingAlert" class="hidden bg-amber-100 border-2 border-amber-400 p-3 rounded-xl text-center text-amber-900 font-bold text-xs">
+      ⏳ Processing & compressing receipts... (<span id="processingCount">0</span>)
+    </div>
+
+    <!-- CATEGORY FILTER CHIPS -->
+    <div class="flex gap-1.5 overflow-x-auto pb-1 text-xs font-bold" id="filterChipsContainer"></div>
+
+    <!-- TRANSACTIONS LIST -->
+    <div class="space-y-3" id="transactionsContainer"></div>
+
+  </main>
+
+  <!-- ================= MANUAL ADD / EDIT MODAL ================= -->
+  <div id="txnModal" class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl p-5 w-full max-w-sm shadow-2xl space-y-3 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center border-b pb-2">
+        <h3 class="font-black text-slate-800 text-base" id="modalTitle">Add Expense Manually</h3>
+        <button onclick="closeTxnModal()" class="text-slate-400 text-2xl font-bold leading-none">&times;</button>
+      </div>
+
+      <input type="hidden" id="editTxnId" />
+
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 uppercase">Amount (₹) *</label>
+        <input type="number" id="txnAmount" placeholder="e.g. 2500" 
+               class="w-full p-2.5 border-2 rounded-xl text-lg font-black focus:outline-blue-600" />
+      </div>
+
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 uppercase">Paid To / Vendor / Item *</label>
+        <input type="text" id="txnPaidTo" placeholder="e.g. Balaji Hardware / Sand Truck" 
+               class="w-full p-2.5 border-2 rounded-xl text-sm font-bold focus:outline-blue-600" />
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 uppercase">Date *</label>
+          <input type="date" id="txnDate" class="w-full p-2 border-2 rounded-xl text-xs font-bold" />
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 uppercase">UTR / Bill No.</label>
+          <input type="text" id="txnUtr" placeholder="Optional" class="w-full p-2 border-2 rounded-xl text-xs font-bold" />
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 uppercase">Category *</label>
+        <select id="txnCategorySelect" class="w-full p-2.5 border-2 rounded-xl text-xs font-bold bg-white focus:outline-blue-600"></select>
+      </div>
+
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 uppercase">Attach Bill / Screenshot Proof</label>
+        <input type="file" id="txnProofInput" accept="image/*" class="w-full text-xs text-slate-500 mt-1" onchange="previewManualImage(event)" />
+        <div id="manualImagePreviewContainer" class="mt-2 hidden">
+          <img id="manualImagePreview" class="h-24 w-auto rounded border object-contain" />
+        </div>
+      </div>
+
+      <div class="flex gap-2 pt-2">
+        <button onclick="saveManualTxn()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-sm shadow">
+          Save Locally
+        </button>
+        <button onclick="closeTxnModal()" class="flex-1 bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-sm">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= CATEGORY MANAGER MODAL ================= -->
+  <div id="categoryModal" class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl p-5 w-full max-w-sm shadow-2xl space-y-4">
+      <div class="flex justify-between items-center border-b pb-2">
+        <h3 class="font-black text-slate-800 text-base">Manage Categories</h3>
+        <button onclick="closeCategoryModal()" class="text-slate-400 text-2xl font-bold leading-none">&times;</button>
+      </div>
+
+      <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+        <label class="block text-[11px] font-black text-slate-600 uppercase">Create New Category</label>
+        <input type="text" id="newCategoryName" placeholder="e.g. Fuel, Site Petty Cash" class="w-full p-2 border-2 rounded-lg text-xs font-bold" />
+        
+        <label class="flex items-center gap-2 pt-1 cursor-pointer">
+          <input type="checkbox" id="newCategoryIsClaimable" class="w-4 h-4 text-emerald-600 rounded" />
+          <span class="text-xs font-bold text-slate-700">Claimable from Company?</span>
+        </label>
+
+        <button onclick="saveNewCategory()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 rounded-lg text-xs">
+          + Add Category
+        </button>
+      </div>
+
+      <div class="max-h-52 overflow-y-auto space-y-1.5" id="categoryListContainer"></div>
+
+      <button onclick="closeCategoryModal()" class="w-full bg-slate-200 text-slate-800 font-bold py-2 rounded-xl text-xs">
+        Done
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= SETTINGS & CLOUD SYNC CONFIG ================= -->
+  <div id="settingsModal" class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl p-5 w-full max-w-sm shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center border-b pb-2">
+        <h3 class="font-black text-slate-800 text-base">Settings & Backup</h3>
+        <button onclick="closeSettingsModal()" class="text-slate-400 text-2xl font-bold leading-none">&times;</button>
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-slate-600 uppercase">Manager Name</label>
+        <input type="text" id="settingsNameInput" class="w-full p-2.5 border-2 rounded-xl text-sm font-bold mt-1" />
+      </div>
+
+      <!-- Cloud Sync Webhook -->
+      <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+        <label class="block text-xs font-bold text-slate-700 uppercase">Cloud Sync Webhook URL (Optional)</label>
+        <p class="text-[10px] text-slate-500 mt-0.5">Google Apps Script, Supabase, or REST Webhook. Auto-syncs your records when phone is online.</p>
+        <input type="url" id="settingsSyncUrlInput" placeholder="https://script.google.com/macros/s/.../exec" 
+               class="w-full p-2 border-2 rounded-xl text-xs font-mono mt-1" />
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-slate-600 uppercase">Gemini Vision API Key (Optional)</label>
+        <p class="text-[10px] text-slate-500 mt-0.5">For AI auto-reading of amount and vendor from UPI screenshots.</p>
+        <input type="password" id="settingsApiKeyInput" placeholder="Paste Gemini key" class="w-full p-2 border-2 rounded-xl text-xs mt-1" />
+      </div>
+
+      <!-- Offline Backup Export/Import -->
+      <div class="border-t pt-3 space-y-2">
+        <label class="block text-xs font-bold text-slate-600 uppercase">Manual Device Backup</label>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="downloadJsonBackup()" class="bg-slate-800 text-white text-xs font-bold py-2 rounded-lg">
+            💾 Export Backup
+          </button>
+          <label class="bg-slate-200 text-slate-800 text-xs font-bold py-2 rounded-lg text-center cursor-pointer flex items-center justify-center">
+            📂 Restore Backup
+            <input type="file" accept=".json" class="hidden" onchange="restoreJsonBackup(event)" />
+          </label>
+        </div>
+      </div>
+
+      <div class="pt-2 border-t flex gap-2">
+        <button onclick="saveSettings()" class="flex-1 bg-blue-600 text-white font-bold py-2 rounded-xl text-xs">Save</button>
+        <button onclick="closeSettingsModal()" class="flex-1 bg-slate-200 text-slate-800 font-bold py-2 rounded-xl text-xs">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= PRINTABLE MONTHLY CLAIM REPORT ================= -->
+  <div id="printableReport" class="hidden p-8 bg-white text-slate-900 min-h-screen">
+    <div class="flex justify-between items-start border-b-2 border-slate-900 pb-3 mb-4">
+      <div>
+        <h1 class="text-2xl font-black uppercase tracking-tight">Monthly Expense Claim Voucher</h1>
+        <p class="text-xs font-bold text-slate-600">Company Reimbursement Sheet with Attached Proofs & Receipts</p>
+      </div>
+      <div class="text-right text-xs space-y-0.5">
+        <p><strong>Project Manager:</strong> <span id="rptManagerName"></span></p>
+        <p><strong>Month / Period:</strong> <span id="rptMonth"></span></p>
+        <p><strong>Submission Date:</strong> <span id="rptGenDate"></span></p>
+      </div>
+    </div>
+
+    <div class="flex justify-between items-center bg-slate-100 p-3.5 border border-slate-300 rounded-lg mb-6">
+      <div>
+        <span class="text-xs uppercase font-black text-slate-600">Total Reimbursable Amount Claimed</span>
+        <div class="text-2xl font-black text-emerald-800" id="rptTotalAmount">₹0</div>
+      </div>
+      <div class="text-right">
+        <span class="text-xs font-bold text-slate-600">Total Items:</span>
+        <span class="text-base font-black text-slate-900 ml-1" id="rptTotalItems">0</span>
+      </div>
+    </div>
+
+    <h2 class="text-xs font-black uppercase tracking-wider text-slate-700 mb-2">Itemized Expense Records</h2>
+    <table class="w-full text-left text-xs border border-collapse border-slate-400 mb-6">
+      <thead>
+        <tr class="bg-slate-200 text-slate-800">
+          <th class="border border-slate-400 p-2 text-center w-12">Sr. No.</th>
+          <th class="border border-slate-400 p-2 w-24">Date</th>
+          <th class="border border-slate-400 p-2">Paid To / Description</th>
+          <th class="border border-slate-400 p-2">Category</th>
+          <th class="border border-slate-400 p-2">UTR / Bill Ref</th>
+          <th class="border border-slate-400 p-2 text-right w-24">Amount (₹)</th>
+        </tr>
+      </thead>
+      <tbody id="rptTableBody"></tbody>
+    </table>
+
+    <div class="grid grid-cols-2 gap-8 pt-8 border-t border-slate-300 mb-8">
+      <div>
+        <p class="text-xs font-bold mb-10">Claimant Signature (PM):</p>
+        <div class="border-b border-slate-500 w-48"></div>
+      </div>
+      <div class="text-right">
+        <p class="text-xs font-bold mb-10">Verified & Approved By (Accounts / Director):</p>
+        <div class="border-b border-slate-500 w-48 ml-auto"></div>
+      </div>
+    </div>
+
+    <div class="pt-6 border-t-2 border-slate-900">
+      <h2 class="text-sm font-black uppercase tracking-wider mb-4">
+        Annexure: Payment Screenshots & Bill Attachments
+      </h2>
+      <div id="rptProofsGrid" class="grid grid-cols-2 gap-4"></div>
+    </div>
+
+    <div class="mt-8 no-print text-center space-x-3">
+      <button onclick="window.print()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl shadow-lg">
+        🖨️ Print or Save as PDF
+      </button>
+      <button onclick="exportToExcel()" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-6 py-3 rounded-xl shadow-lg">
+        📥 Export Excel (.xlsx)
+      </button>
+      <button onclick="closeReport()" class="bg-slate-300 hover:bg-slate-400 text-slate-800 font-bold px-6 py-3 rounded-xl">
+        Back to Khata
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= SCRIPTS & HYBRID LOGIC ================= -->
+  <script>
+    // 1. REGISTER SERVICE WORKER FOR 100% OFFLINE BOOT
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW registration note:', err));
+      });
+    }
+
+    // 2. INDEXEDDB SETUP
+    let db;
+    const DB_NAME = 'SiteKhataHybridDB';
+    const DB_VERSION = 1;
+
+    function openDatabase() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = (e) => {
+          const d = e.target.result;
+          if (!d.objectStoreNames.contains('transactions')) {
+            d.createObjectStore('transactions', { keyPath: 'id' });
+          }
+        };
+        req.onsuccess = () => { db = req.result; resolve(); };
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    function dbGetAll() {
+      return new Promise((resolve) => {
+        const tx = db.transaction('transactions', 'readonly');
+        const req = tx.objectStore('transactions').getAll();
+        req.onsuccess = () => resolve(req.result || []);
+      });
+    }
+
+    function dbPut(item) {
+      return new Promise((resolve) => {
+        const tx = db.transaction('transactions', 'readwrite');
+        tx.objectStore('transactions').put(item);
+        tx.oncomplete = () => resolve();
+      });
+    }
+
+    function dbDelete(id) {
+      return new Promise((resolve) => {
+        const tx = db.transaction('transactions', 'readwrite');
+        tx.objectStore('transactions').delete(id);
+        tx.oncomplete = () => resolve();
+      });
+    }
+
+    // 3. STATE & DATA
+    const defaultCategories = [
+      { id: 'cat_comp', name: 'Claimable from Company', isClaimable: true, badgeClass: 'bg-emerald-600 text-white' },
+      { id: 'cat_pers_claim', name: 'Personal and Claimable', isClaimable: true, badgeClass: 'bg-teal-600 text-white' },
+      { id: 'cat_pers_not', name: 'Personal Not Claimable', isClaimable: false, badgeClass: 'bg-slate-600 text-white' },
+      { id: 'cat_other', name: 'Others', isClaimable: false, badgeClass: 'bg-purple-600 text-white' }
+    ];
+
+    let categories = JSON.parse(localStorage.getItem('sk_cats')) || defaultCategories;
+    let transactions = [];
+    let currentFilter = 'ALL';
+    let userName = localStorage.getItem('sk_username') || '';
+    let apiKey = localStorage.getItem('sk_gemini_key') || '';
+    let syncUrl = localStorage.getItem('sk_sync_url') || '';
+    let manualImageBase64 = null;
+
+    // 4. ONLINE / OFFLINE LISTENERS
+    window.addEventListener('online', updateNetworkStatus);
+    window.addEventListener('offline', updateNetworkStatus);
+
+    function updateNetworkStatus() {
+      const isOnline = navigator.onLine;
+      const bar = document.getElementById('networkStatusBar');
+      const icon = document.getElementById('networkIcon');
+      const text = document.getElementById('networkText');
+      const pendingCount = transactions.filter(t => t.syncStatus === 'pending').length;
+      const badge = document.getElementById('syncBadge');
+
+      if (pendingCount > 0) {
+        badge.innerText = `${pendingCount} to backup`;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+
+      if (isOnline) {
+        bar.className = "bg-emerald-600 text-white text-[11px] font-bold py-1 px-4 text-center sticky top-0 z-40 flex items-center justify-between";
+        icon.innerText = "🟢";
+        text.innerText = "Online — Auto-Sync Active";
+        // Auto-sync when transitioning from offline to online
+        if (pendingCount > 0 && syncUrl) {
+          triggerCloudSync();
+        }
+      } else {
+        bar.className = "bg-amber-600 text-white text-[11px] font-bold py-1 px-4 text-center sticky top-0 z-40 flex items-center justify-between";
+        icon.innerText = "🟠";
+        text.innerText = "Offline Mode — Working Locally";
+      }
+    }
+
+    // 5. INITIALIZE
+    window.onload = async function() {
+      await openDatabase();
+
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      document.getElementById('selectedMonth').value = `${yyyy}-${mm}`;
+
+      if (!userName) {
+        document.getElementById('loginModal').classList.remove('hidden');
+      } else {
+        document.getElementById('headerUserName').innerText = userName;
+        transactions = await dbGetAll();
+        renderFilterChips();
+        renderUI();
+        updateNetworkStatus();
+      }
+    };
+
+    function handleLogin() {
+      const input = document.getElementById('loginNameInput').value.trim();
+      if (!input) return alert('Please enter your name');
+      userName = input;
+      localStorage.setItem('sk_username', userName);
+      document.getElementById('headerUserName').innerText = userName;
+      document.getElementById('loginModal').classList.add('hidden');
+      renderFilterChips();
+      renderUI();
+      updateNetworkStatus();
+    }
+
+    // 6. CATEGORY CHIPS
+    function renderFilterChips() {
+      const container = document.getElementById('filterChipsContainer');
+      container.innerHTML = `
+        <button onclick="setFilter('ALL')" 
+          class="px-3 py-1.5 rounded-full whitespace-nowrap transition ${currentFilter === 'ALL' ? 'bg-slate-900 text-white' : 'bg-white border text-slate-700'}">
+          All
+        </button>
+        <button onclick="setFilter('CLAIMABLE_ONLY')" 
+          class="px-3 py-1.5 rounded-full whitespace-nowrap transition ${currentFilter === 'CLAIMABLE_ONLY' ? 'bg-emerald-700 text-white shadow' : 'bg-white border border-emerald-400 text-emerald-700'}">
+          ⭐ All Claimable
+        </button>
+      `;
+
+      categories.forEach(c => {
+        const isSel = currentFilter === c.id;
+        container.innerHTML += `
+          <button onclick="setFilter('${c.id}')" 
+            class="px-3 py-1.5 rounded-full whitespace-nowrap transition ${isSel ? 'bg-slate-900 text-white' : 'bg-white border text-slate-700'}">
+            ${c.name}
+          </button>
+        `;
+      });
+    }
+
+    function setFilter(f) {
+      currentFilter = f;
+      renderFilterChips();
+      renderUI();
+    }
+
+    // 7. BULK UPLOAD + OFFLINE COMPRESSION
+    async function handleBulkFiles(event) {
+      const files = Array.from(event.target.files);
+      if (!files.length) return;
+
+      const alertBox = document.getElementById('processingAlert');
+      const countSpan = document.getElementById('processingCount');
+      alertBox.classList.remove('hidden');
+
+      let done = 0;
+      for (const file of files) {
+        countSpan.innerText = `${done + 1} of ${files.length}`;
+        const compressedBase64 = await compressImageFile(file, 900, 0.75);
+
+        let parsed = {
+          amount: 0,
+          paidTo: `UPI Payment #${transactions.length + 1}`,
+          utr: 'N/A',
+          date: new Date().toISOString().split('T')[0]
+        };
+
+        // Only call Gemini if online and API key exists
+        if (navigator.onLine && apiKey) {
+          try {
+            const aiData = await parseWithGemini(compressedBase64, 'image/jpeg');
+            if (aiData) parsed = aiData;
+          } catch (e) {
+            console.warn('Gemini offline or parsing failed, using offline fallback', e);
+          }
+        }
+
+        const newTxn = {
+          id: Date.now() + Math.random(),
+          srNo: transactions.length + 1,
+          amount: Number(parsed.amount) || 0,
+          paidTo: parsed.paidTo || `Payment #${transactions.length + 1}`,
+          utr: parsed.utr || 'N/A',
+          date: parsed.date || new Date().toISOString().split('T')[0],
+          categoryId: 'cat_comp',
+          proofImage: compressedBase64,
+          syncStatus: 'pending' // Queued for backup
+        };
+
+        transactions.push(newTxn);
+        await dbPut(newTxn);
+        done++;
+      }
+
+      alertBox.classList.add('hidden');
+      event.target.value = '';
+      renderUI();
+      updateNetworkStatus();
+
+      if (navigator.onLine && syncUrl) {
+        triggerCloudSync();
+      }
+    }
+
+    function compressImageFile(file, maxWidth, quality) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (e) => {
+          const img = new Image();
+          img.src = e.target.result;
+          img.onload = () => {
+            const scale = Math.min(maxWidth / img.width, 1);
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width * scale;
+            canvas.height = img.height * scale;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+          };
+        };
+      });
+    }
+
+    async function parseWithGemini(base64Data, mimeType) {
+      const cleanBase64 = base64Data.split(',')[1];
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      const prompt = `Extract Indian UPI receipt information strictly as JSON: {"amount": number, "paidTo": string, "utr": string, "date": "YYYY-MM-DD"}`;
+      
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: cleanBase64 } }] }]
+        })
+      });
+      const data = await res.json();
+      return JSON.parse(data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim());
+    }
+
+    // 8. MANUAL ENTRY & EDITING
+    function openManualModal(editId = null) {
+      manualImageBase64 = null;
+      document.getElementById('manualImagePreviewContainer').classList.add('hidden');
+      document.getElementById('txnProofInput').value = '';
+
+      const select = document.getElementById('txnCategorySelect');
+      select.innerHTML = categories.map(c => `
+        <option value="${c.id}">${c.name} ${c.isClaimable ? '(⭐ Claimable)' : ''}</option>
+      `).join('');
+
+      if (editId) {
+        const txn = transactions.find(t => t.id === editId);
+        if (!txn) return;
+        document.getElementById('modalTitle').innerText = 'Edit Expense Record';
+        document.getElementById('editTxnId').value = txn.id;
+        document.getElementById('txnAmount').value = txn.amount;
+        document.getElementById('txnPaidTo').value = txn.paidTo;
+        document.getElementById('txnDate').value = txn.date;
+        document.getElementById('txnUtr').value = txn.utr === 'N/A' ? '' : txn.utr;
+        document.getElementById('txnCategorySelect').value = txn.categoryId;
+        if (txn.proofImage) {
+          manualImageBase64 = txn.proofImage;
+          document.getElementById('manualImagePreview').src = txn.proofImage;
+          document.getElementById('manualImagePreviewContainer').classList.remove('hidden');
+        }
+      } else {
+        document.getElementById('modalTitle').innerText = 'Add Expense Manually';
+        document.getElementById('editTxnId').value = '';
+        document.getElementById('txnAmount').value = '';
+        document.getElementById('txnPaidTo').value = '';
+        document.getElementById('txnDate').value = new Date().toISOString().split('T')[0];
+        document.getElementById('txnUtr').value = '';
+        document.getElementById('txnCategorySelect').value = categories[0].id;
+      }
+
+      document.getElementById('txnModal').classList.remove('hidden');
+    }
+
+    function closeTxnModal() {
+      document.getElementById('txnModal').classList.add('hidden');
+    }
+
+    async function previewManualImage(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      manualImageBase64 = await compressImageFile(file, 900, 0.75);
+      document.getElementById('manualImagePreview').src = manualImageBase64;
+      document.getElementById('manualImagePreviewContainer').classList.remove('hidden');
+    }
+
+    async function saveManualTxn() {
+      const amount = parseFloat(document.getElementById('txnAmount').value);
+      const paidTo = document.getElementById('txnPaidTo').value.trim();
+      const date = document.getElementById('txnDate').value;
+      const utr = document.getElementById('txnUtr').value.trim() || 'N/A';
+      const categoryId = document.getElementById('txnCategorySelect').value;
+      const editId = document.getElementById('editTxnId').value;
+
+      if (isNaN(amount) || amount <= 0) return alert('Please enter a valid amount');
+      if (!paidTo) return alert('Please enter recipient/vendor name');
+      if (!date) return alert('Please select a date');
+
+      if (editId) {
+        const txn = transactions.find(t => String(t.id) === String(editId));
+        if (txn) {
+          txn.amount = amount;
+          txn.paidTo = paidTo;
+          txn.date = date;
+          txn.utr = utr;
+          txn.categoryId = categoryId;
+          txn.syncStatus = 'pending';
+          if (manualImageBase64) txn.proofImage = manualImageBase64;
+          await dbPut(txn);
+        }
+      } else {
+        const newTxn = {
+          id: Date.now() + Math.random(),
+          srNo: transactions.length + 1,
+          amount: amount,
+          paidTo: paidTo,
+          utr: utr,
+          date: date,
+          categoryId: categoryId,
+          proofImage: manualImageBase64,
+          syncStatus: 'pending'
+        };
+        transactions.push(newTxn);
+        await dbPut(newTxn);
+      }
+
+      closeTxnModal();
+      renderUI();
+      updateNetworkStatus();
+
+      if (navigator.onLine && syncUrl) {
+        triggerCloudSync();
+      }
+    }
+
+    async function setTransactionCategory(id, catId) {
+      const txn = transactions.find(t => t.id === id);
+      if (txn) {
+        txn.categoryId = catId;
+        txn.syncStatus = 'pending';
+        await dbPut(txn);
+        renderUI();
+        updateNetworkStatus();
+      }
+    }
+
+    async function deleteTxn(id) {
+      if (!confirm('Delete this transaction?')) return;
+      await dbDelete(id);
+      transactions = transactions.filter(t => t.id !== id);
+      transactions.forEach((t, i) => t.srNo = i + 1);
+      for (const t of transactions) { await dbPut(t); }
+      renderUI();
+      updateNetworkStatus();
+    }
+
+    // 9. RENDER UI
+    function renderUI() {
+      const container = document.getElementById('transactionsContainer');
+      container.innerHTML = '';
+
+      const selMonth = document.getElementById('selectedMonth').value;
+      let claimTotal = 0;
+      let claimCount = 0;
+      let grandTotal = 0;
+
+      const monthTxns = transactions.filter(t => !selMonth || (t.date && t.date.startsWith(selMonth)));
+
+      monthTxns.forEach(t => {
+        grandTotal += t.amount;
+        const cat = categories.find(c => c.id === t.categoryId);
+        if (cat && cat.isClaimable) {
+          claimTotal += t.amount;
+          claimCount++;
+        }
+      });
+
+      document.getElementById('totalClaimableDisplay').innerText = `₹ ${claimTotal.toLocaleString('en-IN')}`;
+      document.getElementById('claimCountBadge').innerText = `${claimCount} claimable`;
+      document.getElementById('grandTotalDisplay').innerText = `₹ ${grandTotal.toLocaleString('en-IN')} (${monthTxns.length} total)`;
+
+      let filtered = monthTxns;
+      if (currentFilter === 'CLAIMABLE_ONLY') {
+        filtered = monthTxns.filter(t => {
+          const cat = categories.find(c => c.id === t.categoryId);
+          return cat && cat.isClaimable;
+        });
+      } else if (currentFilter !== 'ALL') {
+        filtered = monthTxns.filter(t => t.categoryId === currentFilter);
+      }
+
+      if (!filtered.length) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-slate-400 bg-white rounded-2xl border border-dashed border-slate-300">
+            <p class="text-4xl">📂</p>
+            <p class="mt-2 text-sm font-bold text-slate-700">No records found for this period</p>
+            <p class="text-xs text-slate-400 mt-0.5">Add entries offline anytime. They will sync when connected.</p>
+          </div>
+        `;
+        return;
+      }
+
+      filtered.slice().reverse().forEach(t => {
+        const card = document.createElement('div');
+        card.className = "bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-3";
+
+        const catButtonsHtml = categories.map(c => `
+          <button onclick="setTransactionCategory(${t.id}, '${c.id}')" 
+            class="px-2 py-1.5 text-[10px] font-black rounded-lg border transition ${t.categoryId === c.id ? (c.badgeClass || 'bg-slate-900 text-white') : 'bg-slate-50 text-slate-600 border-slate-200'}">
+            ${c.name}
+          </button>
+        `).join('');
+
+        card.innerHTML = `
+          <div class="flex items-start justify-between">
+            <div class="flex items-center gap-2.5">
+              <span class="bg-slate-900 text-white text-xs font-black px-2 py-1 rounded-md">#${t.srNo}</span>
+              <div>
+                <div class="flex items-center gap-1.5">
+                  <h4 class="font-black text-slate-900 text-base leading-tight">${t.paidTo}</h4>
+                  <span class="text-[10px] ${t.syncStatus === 'synced' ? 'text-emerald-600' : 'text-amber-500 font-bold'}">
+                    ${t.syncStatus === 'synced' ? '✓ Synced' : '⏳ Queued'}
+                  </span>
+                </div>
+                <p class="text-xs text-slate-400 font-mono mt-0.5">UTR: ${t.utr} • ${t.date}</p>
+              </div>
+            </div>
+            <div class="text-right">
+              <span class="text-lg font-black text-slate-900">₹${t.amount.toLocaleString('en-IN')}</span>
+              <div class="flex gap-2 justify-end mt-1 text-xs font-bold">
+                <button onclick="openManualModal(${t.id})" class="text-blue-600 hover:underline">Edit</button>
+                <button onclick="deleteTxn(${t.id})" class="text-red-500 hover:underline">Delete</button>
+              </div>
+            </div>
+          </div>
+
+          ${t.proofImage ? `
+            <div class="flex items-center gap-2 pt-1">
+              <img src="${t.proofImage}" class="w-12 h-12 object-cover rounded border" />
+              <span class="text-[11px] text-slate-500 font-bold">Attached Proof / Receipt</span>
+            </div>
+          ` : ''}
+
+          <div class="grid grid-cols-2 gap-1.5 pt-2 border-t border-slate-100">
+            ${catButtonsHtml}
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    // 10. CLOUD BACKUP & SYNC ENGINE
+    async function triggerCloudSync() {
+      if (!navigator.onLine) {
+        return alert("Phone is currently offline. Connect to Wi-Fi/4G to sync.");
+      }
+
+      if (!syncUrl) {
+        return openSettingsModal();
+      }
+
+      const pendingItems = transactions.filter(t => t.syncStatus === 'pending');
+      if (pendingItems.length === 0) {
+        return alert("All transactions are already backed up to the cloud!");
+      }
+
+      const btn = document.getElementById('syncBtn');
+      btn.innerText = "Syncing...";
+
+      try {
+        const payload = {
+          manager: userName,
+          timestamp: new Date().toISOString(),
+          transactions: pendingItems.map(t => ({
+            srNo: t.srNo,
+            date: t.date,
+            paidTo: t.paidTo,
+            amount: t.amount,
+            utr: t.utr,
+            category: (categories.find(c => c.id === t.categoryId) || {}).name || 'Expense',
+            proofImage: t.proofImage // base64 photo
+          }))
+        };
+
+        const res = await fetch(syncUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          mode: 'no-cors' // Allows flexible Google Script / Webhook endpoints
+        });
+
+        // Mark local records as synced
+        for (const item of pendingItems) {
+          item.syncStatus = 'synced';
+          await dbPut(item);
+        }
+
+        alert(`✅ Backup Complete! ${pendingItems.length} records backed up.`);
+      } catch (err) {
+        alert("Sync error. Please check your webhook URL.");
+        console.error(err);
+      } finally {
+        btn.innerText = "Sync Now";
+        renderUI();
+        updateNetworkStatus();
+      }
+    }
+
+    // 11. MANUAL JSON BACKUP EXPORT / RESTORE
+    function downloadJsonBackup() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
+        userName,
+        categories,
+        transactions
+      }));
+      const dlAnchorElem = document.createElement('a');
+      dlAnchorElem.setAttribute("href", dataStr);
+      dlAnchorElem.setAttribute("download", `SiteKhata_Backup_${userName}_${new Date().toISOString().split('T')[0]}.json`);
+      dlAnchorElem.click();
+    }
+
+    function restoreJsonBackup(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const imported = JSON.parse(e.target.result);
+          if (imported.transactions && Array.isArray(imported.transactions)) {
+            for (const t of imported.transactions) {
+              await dbPut(t);
+            }
+            transactions = await dbGetAll();
+            if (imported.categories) {
+              categories = imported.categories;
+              localStorage.setItem('sk_cats', JSON.stringify(categories));
+            }
+            alert('Backup restored successfully!');
+            renderFilterChips();
+            renderUI();
+            updateNetworkStatus();
+          }
+        } catch (err) {
+          alert('Invalid backup file format');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // 12. MONTHLY REPORT & EXPORT
+    function openMonthlyProofReport() {
+      const selMonth = document.getElementById('selectedMonth').value;
+      const claimTxns = transactions.filter(t => {
+        const matchesMonth = !selMonth || (t.date && t.date.startsWith(selMonth));
+        const cat = categories.find(c => c.id === t.categoryId);
+        return matchesMonth && cat && cat.isClaimable;
+      });
+
+      if (!claimTxns.length) {
+        return alert("No claimable expenses recorded for this month!");
+      }
+
+      document.getElementById('rptManagerName').innerText = userName;
+      document.getElementById('rptMonth').innerText = selMonth || 'All Recorded';
+      document.getElementById('rptGenDate').innerText = new Date().toLocaleDateString('en-IN');
+      document.getElementById('rptTotalItems').innerText = claimTxns.length;
+
+      let sum = 0;
+      const tbody = document.getElementById('rptTableBody');
+      const proofsGrid = document.getElementById('rptProofsGrid');
+      tbody.innerHTML = '';
+      proofsGrid.innerHTML = '';
+
+      claimTxns.forEach((t) => {
+        sum += t.amount;
+        const cat = categories.find(c => c.id === t.categoryId);
+
+        tbody.innerHTML += `
+          <tr>
+            <td class="border border-slate-400 p-2 text-center font-bold">#${t.srNo}</td>
+            <td class="border border-slate-400 p-2">${t.date}</td>
+            <td class="border border-slate-400 p-2 font-bold">${t.paidTo}</td>
+            <td class="border border-slate-400 p-2">${cat ? cat.name : 'Claimable'}</td>
+            <td class="border border-slate-400 p-2 font-mono">${t.utr}</td>
+            <td class="border border-slate-400 p-2 text-right font-black">₹${t.amount.toLocaleString('en-IN')}</td>
+          </tr>
+        `;
+
+        proofsGrid.innerHTML += `
+          <div class="proof-card border border-slate-300 p-3 rounded bg-slate-50 text-center">
+            <div class="flex justify-between items-center text-xs font-bold mb-1 border-b pb-1">
+              <span>Sr. #${t.srNo} — ${t.paidTo}</span>
+              <span class="text-emerald-700">₹${t.amount.toLocaleString('en-IN')}</span>
+            </div>
+            ${t.proofImage ? `
+              <img src="${t.proofImage}" class="max-h-80 mx-auto rounded border object-contain mt-2" />
+            ` : `
+              <div class="py-8 text-xs text-slate-400 italic">No screenshot or bill attached</div>
+            `}
+            <p class="text-[10px] font-mono text-slate-500 mt-1">Date: ${t.date} | UTR: ${t.utr}</p>
+          </div>
+        `;
+      });
+
+      document.getElementById('rptTotalAmount').innerText = `₹ ${sum.toLocaleString('en-IN')}`;
+      document.getElementById('printableReport').classList.remove('hidden');
+      window.scrollTo(0, 0);
+    }
+
+    function closeReport() {
+      document.getElementById('printableReport').classList.add('hidden');
+    }
+
+    function exportToExcel() {
+      const selMonth = document.getElementById('selectedMonth').value;
+      const claimTxns = transactions.filter(t => {
+        const matchesMonth = !selMonth || (t.date && t.date.startsWith(selMonth));
+        const cat = categories.find(c => c.id === t.categoryId);
+        return matchesMonth && cat && cat.isClaimable;
+      });
+
+      const rows = claimTxns.map(t => {
+        const cat = categories.find(c => c.id === t.categoryId);
+        return {
+          "Sr. No.": t.srNo,
+          "Date": t.date,
+          "Vendor / Particulars": t.paidTo,
+          "Category": cat ? cat.name : "Claimable",
+          "Amount (INR)": t.amount,
+          "UTR / Ref No.": t.utr,
+          "Manager": userName
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Monthly_Claims");
+      XLSX.writeFile(wb, `Expense_Claim_${userName}_${selMonth}.xlsx`);
+    }
+
+    // 13. CATEGORIES MODAL
+    function openCategoryModal() {
+      renderCategoryModalList();
+      document.getElementById('categoryModal').classList.remove('hidden');
+    }
+    function closeCategoryModal() {
+      document.getElementById('categoryModal').classList.add('hidden');
+    }
+
+    function renderCategoryModalList() {
+      const list = document.getElementById('categoryListContainer');
+      list.innerHTML = categories.map(c => `
+        <div class="flex items-center justify-between p-2 bg-slate-100 rounded-lg text-xs font-bold">
+          <div>
+            <span>${c.name}</span>
+            <span class="ml-1.5 text-[9px] px-1.5 py-0.5 rounded ${c.isClaimable ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}">
+              ${c.isClaimable ? 'Claimable' : 'Not Claimable'}
+            </span>
+          </div>
+          ${!['cat_comp','cat_pers_claim','cat_pers_not','cat_other'].includes(c.id) ? `
+            <button onclick="deleteCategory('${c.id}')" class="text-red-500 font-bold">Delete</button>
+          ` : '<span class="text-slate-400 text-[10px]">Default</span>'}
+        </div>
+      `).join('');
+    }
+
+    function saveNewCategory() {
+      const name = document.getElementById('newCategoryName').value.trim();
+      const isClaimable = document.getElementById('newCategoryIsClaimable').checked;
+      if (!name) return alert('Enter category name');
+
+      const newCat = {
+        id: 'cust_' + Date.now(),
+        name: name,
+        isClaimable: isClaimable,
+        badgeClass: isClaimable ? 'bg-emerald-700 text-white' : 'bg-slate-700 text-white'
+      };
+
+      categories.push(newCat);
+      localStorage.setItem('sk_cats', JSON.stringify(categories));
+      document.getElementById('newCategoryName').value = '';
+      document.getElementById('newCategoryIsClaimable').checked = false;
+      renderCategoryModalList();
+      renderFilterChips();
+      renderUI();
+    }
+
+    function deleteCategory(id) {
+      categories = categories.filter(c => c.id !== id);
+      localStorage.setItem('sk_cats', JSON.stringify(categories));
+      renderCategoryModalList();
+      renderFilterChips();
+      renderUI();
+    }
+
+    // 14. SETTINGS
+    function openSettingsModal() {
+      document.getElementById('settingsNameInput').value = userName;
+      document.getElementById('settingsApiKeyInput').value = apiKey;
+      document.getElementById('settingsSyncUrlInput').value = syncUrl;
+      document.getElementById('settingsModal').classList.remove('hidden');
+    }
+    function closeSettingsModal() {
+      document.getElementById('settingsModal').classList.add('hidden');
+    }
+    function saveSettings() {
+      userName = document.getElementById('settingsNameInput').value.trim();
+      apiKey = document.getElementById('settingsApiKeyInput').value.trim();
+      syncUrl = document.getElementById('settingsSyncUrlInput').value.trim();
+      localStorage.setItem('sk_username', userName);
+      localStorage.setItem('sk_gemini_key', apiKey);
+      localStorage.setItem('sk_sync_url', syncUrl);
+      document.getElementById('headerUserName').innerText = userName;
+      closeSettingsModal();
+      renderUI();
+      updateNetworkStatus();
+    }
+  </script>
+</body>
+</html>
